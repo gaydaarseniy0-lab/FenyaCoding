@@ -41,6 +41,38 @@ jobs:
           Path("/tmp/fenya-overlay.zip").write_bytes(archive)
           PY
           unzip -oq /tmp/fenya-overlay.zip -d project
+          - name: Fix and expose SoundCloud player
+            run: |
+              python3 - <<'PY'
+              from pathlib import Path
+              files = list(Path("project").rglob("MainActivity.kt"))
+              if not files:
+                  raise SystemExit("MainActivity.kt not found")
+              p = files[0]
+              s = p.read_text()
+              old = 'if (submittedUrl.isNotEmpty()) {'
+              new = 'if (submittedUrl.isNotEmpty()) {\n                    val playerUrl = "https://w.soundcloud.com/player/?url=${Uri.encode(submittedUrl)}&auto_play=false&visual=true"'
+              if old not in s:
+                  raise SystemExit("SoundCloud screen anchor not found")
+              s = s.replace(old, new, 1)
+              old_factory = 'factory = { ctx -> WebView(ctx).apply {'
+              new_factory = 'factory = { ctx -> WebView(ctx).apply {\n                            tag = playerUrl'
+              if old_factory not in s:
+                  raise SystemExit("SoundCloud WebView factory not found")
+              s = s.replace(old_factory, new_factory, 1)
+              old_load = 'loadUrl("https://w.soundcloud.com/player/?url=${Uri.encode(submittedUrl)}&auto_play=false&visual=true")'
+              if old_load not in s:
+                  raise SystemExit("SoundCloud player URL not found")
+              s = s.replace(old_load, 'loadUrl(playerUrl)', 1)
+              old_update = 'update = { view -> view.loadUrl("https://w.soundcloud.com/player/?url=${Uri.encode(submittedUrl)}&auto_play=false&visual=true") }'
+              new_update = 'update = { view -> if (view.tag != playerUrl) { view.tag = playerUrl; view.loadUrl(playerUrl) } }'
+              if old_update not in s:
+                  raise SystemExit("SoundCloud WebView update anchor not found")
+              s = s.replace(old_update, new_update, 1)
+              s = s.replace('Search("Поиск")', 'Search("SoundCloud")', 1)
+              p.write_text(s)
+              print("SoundCloud WebView reload fix applied")
+              PY
           find project -name settings.gradle.kts -print
 
       - name: Install Niko launcher icon and bump app version
@@ -67,7 +99,7 @@ jobs:
           g = gradle.read_text()
           g = re.sub(r'versionCode\s*=\s*\d+', lambda m: 'versionCode = ' + str(int(re.search(r'\d+', m.group()).group()) + 1), g, count=1)
           if re.search(r'versionName\s*=\s*"[^"]+"', g):
-              g = re.sub(r'versionName\s*=\s*"[^"]+"', 'versionName = "1.5"', g, count=1)
+              g = re.sub(r'versionName\s*=\s*"[^"]+"', 'versionName = "1.6"', g, count=1)
           gradle.write_text(g)
           PY
 
