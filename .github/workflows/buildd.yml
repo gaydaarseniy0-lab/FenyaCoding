@@ -50,7 +50,7 @@ jobs:
           test -n "$MAIN"
           cp FenyaCoding-Source/MainActivity.kt "$MAIN"
           cp FenyaCoding-Source/AndroidManifest.xml "$PROJECT_DIR/app/src/main/AndroidManifest.xml"
-          echo "Installed full app: SoundCloud WebView, local audio picker/player, library and animated purple starfield"
+          echo "Installed full app: SoundCloud WebView, local player, Android media-session controls, full-screen now-playing and falling purple stars"
 
       - name: Install Niko launcher icon and bump app version
         run: |
