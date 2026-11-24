@@ -29,10 +29,11 @@ jobs:
       - name: Align Java and Kotlin JVM targets
         run: |
           cat > "$RUNNER_TEMP/jvm-target.gradle" <<'EOF'
-          allprojects {
-              tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach {
-                  sourceCompatibility = JavaVersion.VERSION_17
-                  targetCompatibility = JavaVersion.VERSION_17
+          gradle.projectsEvaluated {
+              allprojects {
+                  tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+                      kotlinOptions.jvmTarget = "1.8"
+                  }
               }
           }
           EOF
