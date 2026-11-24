@@ -47,9 +47,10 @@ jobs:
         run: |
           PROJECT_DIR=$(dirname "$(find project -name settings.gradle.kts -print -quit)")
           RES="$PROJECT_DIR/app/src/main/res"
-          mkdir -p "$RES/drawable" "$RES/mipmap-anydpi-v26" "$RES/values"
+          mkdir -p "$RES/drawable" "$RES/mipmap-anydpi-v26" "$RES/mipmap-anydpi" "$RES/values"
           cp FenyaCoding-Niko-Icon/niko_foreground.xml "$RES/drawable/niko_foreground.xml"
           cp FenyaCoding-Niko-Icon/ic_launcher.xml "$RES/mipmap-anydpi-v26/ic_launcher.xml"
+          cp FenyaCoding-Niko-Icon/ic_launcher_fallback.xml "$RES/mipmap-anydpi/ic_launcher.xml"
           cp FenyaCoding-Niko-Icon/niko_icon_background.xml "$RES/values/niko_icon_background.xml"
           python3 - "$PROJECT_DIR" <<'PY'
           import re, sys
