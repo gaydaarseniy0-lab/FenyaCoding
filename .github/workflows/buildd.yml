@@ -19,7 +19,27 @@ jobs:
         run: |
           mkdir project
           unzip -oq FenyaCoding-Android-v1-phone-build.zip -d project
-          base64 -d FenyaCoding-Overlay.zip.b64 > /tmp/fenya-overlay.zip
+          python3 - <<'PY'
+          import base64, io, zipfile
+          from pathlib import Path
+          raw = Path("FenyaCoding-Overlay.zip.b64").read_text().strip()
+          candidates = [raw]
+          if len(raw) % 4 == 1:
+              candidates = [raw[:i] + raw[i+1:] for i in range(len(raw))]
+          archive = None
+          for candidate in candidates:
+              try:
+                  data = base64.b64decode(candidate, validate=True)
+                  with zipfile.ZipFile(io.BytesIO(data)) as z:
+                      if z.testzip() is None and any(n.endswith("MainActivity.kt") for n in z.namelist()):
+                          archive = data
+                          break
+              except Exception:
+                  pass
+          if archive is None:
+              raise SystemExit("Overlay archive is corrupted; no valid ZIP candidate found")
+          Path("/tmp/fenya-overlay.zip").write_bytes(archive)
+          PY
           unzip -oq /tmp/fenya-overlay.zip -d project
           find project -name settings.gradle.kts -print
 
@@ -44,7 +64,7 @@ jobs:
           p = Path(os.environ["PROJECT_DIR"]) / "app" / "build.gradle.kts"
           s = p.read_text()
           s += """
-
+          
           android {
               compileOptions {
                   sourceCompatibility = JavaVersion.VERSION_17
