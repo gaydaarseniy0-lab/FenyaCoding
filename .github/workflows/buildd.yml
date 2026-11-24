@@ -26,6 +26,10 @@ jobs:
           PROJECT_DIR=$(dirname "$(find project -name settings.gradle.kts -print -quit)")
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
+      - name: Align Java and Kotlin JVM targets
+        run: |
+          printf '\n// Align Java bytecode target with Kotlin JVM target\ntasks.withType<org.gradle.api.tasks.compile.JavaCompile>().configureEach {\n    sourceCompatibility = "17"\n    targetCompatibility = "17"\n}\n' >> "$PROJECT_DIR/app/build.gradle.kts"
+
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
