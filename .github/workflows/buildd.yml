@@ -26,24 +26,34 @@ jobs:
           PROJECT_DIR=$(dirname "$(find project -name settings.gradle.kts -print -quit)")
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      - name: Align Java and Kotlin JVM targets
+      - name: Align Java compile target
         run: |
-          cat > "$RUNNER_TEMP/jvm-target.gradle" <<'EOF'
-          gradle.projectsEvaluated {
-              allprojects {
-                  tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-                      kotlinOptions.jvmTarget = "1.8"
-                  }
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          p = Path(os.environ["PROJECT_DIR"]) / "app" / "build.gradle.kts"
+          s = p.read_text()
+          s += """
+
+          // CI compatibility: match Java bytecode target to Kotlin/JVM 17.
+          android {
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
               }
           }
-          EOF
+          """
+          p.write_text(s)
+          print("Updated:", p)
+          print(s)
+          PY
 
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
 
       - name: Build APK
-        run: gradle -I "$RUNNER_TEMP/jvm-target.gradle" -p "$PROJECT_DIR" assembleDebug
+        run: gradle -p "$PROJECT_DIR" assembleDebug
 
       - uses: actions/upload-artifact@v4
         with:
