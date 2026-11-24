@@ -12,6 +12,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import java.net.URL
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -72,7 +79,18 @@ private fun FenyaApp() {
     var localName by remember { mutableStateOf("Локальный трек не выбран") }
     var isPlaying by remember { mutableStateOf(false) }
     var player by remember { mutableStateOf<MediaPlayer?>(null) }
+    var playbackPosition by remember { mutableIntStateOf(0) }
+    var playbackDuration by remember { mutableIntStateOf(0) }
     val context = LocalContext.current
+
+    LaunchedEffect(player, isPlaying) {
+        val active = player ?: return@LaunchedEffect
+        playbackDuration = try { active.duration } catch (_: Exception) { 0 }
+        while (isPlaying) {
+            playbackPosition = try { active.currentPosition } catch (_: Exception) { playbackPosition }
+            kotlinx.coroutines.delay(400)
+        }
+    }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -104,6 +122,7 @@ private fun FenyaApp() {
     )) {
         Box(Modifier.fillMaxSize().background(Ink)) {
             StarField()
+            BoykisserBackdrop()
             if (showSplash) {
                 SplashScreen()
             } else {
@@ -153,7 +172,10 @@ private fun FenyaApp() {
                     Tab.SoundCloud -> SoundCloudScreen(Modifier.padding(padding))
                     Tab.Library -> LibraryScreen(
                         Modifier.padding(padding), localName, localUri != null, isPlaying,
+                        playbackPosition, playbackDuration,
                         onChooseFile = { picker.launch(arrayOf("audio/*")) },
+                        onSeek = { value -> player?.seekTo(value); playbackPosition = value },
+                        onSkip = { delta -> player?.let { p -> p.seekTo((p.currentPosition + delta).coerceIn(0, p.duration)) } },
                         onToggle = {
                             val p = player
                             if (p != null) {
@@ -198,34 +220,72 @@ private fun SplashScreen() {
 }
 
 @Composable
+private fun BoykisserBackdrop() {
+    var bitmap by remember { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(Unit) {
+        bitmap = withContext(Dispatchers.IO) {
+            try {
+                URL("https://media1.tenor.com/m/PLqSqNk8nZIAAAAd/boykisser-%D0%B1%D0%BE%D0%B9%D0%BA%D0%B8%D1%81%D1%81%D0%B5%D1%80.gif")
+                    .openStream().use { BitmapFactory.decodeStream(it) }
+            } catch (_: Exception) { null }
+        }
+    }
+    bitmap?.let {
+        Image(
+            bitmap = it.asImageBitmap(),
+            contentDescription = "Boykisser purple background",
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            alpha = 0.13f,
+            modifier = Modifier.fillMaxSize()
+        )
+    }
+}
+
+@Composable
 private fun StarField() {
-    val transition = rememberInfiniteTransition(label = "spaceMotion")
+    val transition = rememberInfiniteTransition(label = "softSpace")
     val progress by transition.animateFloat(
         initialValue = 0f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(5200, easing = LinearEasing), RepeatMode.Restart),
-        label = "meteorMotion"
+        animationSpec = infiniteRepeatable(tween(7200, easing = LinearEasing), RepeatMode.Restart),
+        label = "cometMotion"
     )
     val twinkle by transition.animateFloat(
-        initialValue = .35f, targetValue = .95f,
-        animationSpec = infiniteRepeatable(tween(1500), RepeatMode.Reverse), label = "starTwinkle"
+        initialValue = .22f, targetValue = .72f,
+        animationSpec = infiniteRepeatable(tween(1900), RepeatMode.Reverse), label = "softTwinkle"
     )
     Canvas(Modifier.fillMaxSize()) {
-        for (i in 0 until 76) {
+        for (i in 0 until 95) {
             val x = ((i * 73 + 19) % 997) / 997f * size.width
             val y = ((i * 137 + 41) % 991) / 991f * size.height
-            val r = if (i % 9 == 0) 2.3f else 1.1f
-            drawCircle(if (i % 3 == 0) Pink.copy(alpha = twinkle) else Color.White.copy(alpha = twinkle * .72f), r, androidx.compose.ui.geometry.Offset(x, y))
+            val radius = if (i % 8 == 0) 5.5f else 2.4f
+            val center = androidx.compose.ui.geometry.Offset(x, y)
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        if (i % 3 == 0) Pink.copy(alpha = twinkle) else Color.White.copy(alpha = twinkle * .8f),
+                        Purple.copy(alpha = twinkle * .20f),
+                        Color.Transparent
+                    ),
+                    center = center,
+                    radius = radius * 4.8f
+                ),
+                radius = radius * 4.8f,
+                center = center
+            )
+            drawCircle(Color.White.copy(alpha = twinkle * .55f), radius = radius * .38f, center = center)
         }
-        for (i in 0 until 3) {
-            val phase = (progress + i * .34f) % 1f
-            val x = phase * (size.width + 180f) - 90f
-            val y = size.height * (.16f + i * .29f)
-            val tail = androidx.compose.ui.geometry.Offset(x - 72f, y + 46f)
+        for (i in 0 until 2) {
+            val phase = (progress + i * .5f) % 1f
+            val x = phase * (size.width + 220f) - 110f
+            val y = size.height * (.22f + i * .42f)
+            val tail = androidx.compose.ui.geometry.Offset(x - 100f, y + 65f)
             val head = androidx.compose.ui.geometry.Offset(x, y)
-            drawLine(Purple.copy(alpha = .12f), tail, head, strokeWidth = 9f)
-            drawLine(Color.White.copy(alpha = .75f), tail, head, strokeWidth = 2.1f)
-            drawCircle(Pink.copy(alpha = .85f), 3.2f, head)
-            drawCircle(Color.White.copy(alpha = .75f), 1.3f, head)
+            drawLine(Purple.copy(alpha = .08f), tail, head, strokeWidth = 19f)
+            drawLine(Color.White.copy(alpha = .5f), tail, head, strokeWidth = 2.5f)
+            drawCircle(
+                Brush.radialGradient(listOf(Pink.copy(alpha = .8f), Purple.copy(alpha = .25f), Color.Transparent), head, 18f),
+                18f, head
+            )
         }
     }
 }
@@ -334,17 +394,17 @@ private fun SourceCard(icon: androidx.compose.ui.graphics.vector.ImageVector, ti
 private fun SoundCloudScreen(modifier: Modifier) {
     var query by remember { mutableStateOf("") }
     var searchUrl by remember { mutableStateOf("https://soundcloud.com/discover") }
-    var pageTitle by remember { mutableStateOf("Открой музыку SoundCloud") }
+    var pageTitle by remember { mutableStateOf("Подборки для тебя") }
     Column(modifier.fillMaxSize()) {
-        AppHeader("SOUNDCLOUD SEARCH")
-        Text("Поиск музыки", Modifier.padding(horizontal = 20.dp), fontSize = 27.sp, fontWeight = FontWeight.Bold)
-        Text("Ищи треки, исполнителей и плейлисты прямо в SoundCloud.", Modifier.padding(horizontal = 20.dp, vertical = 6.dp), color = Muted, fontSize = 12.sp)
+        AppHeader("FENYA MUSIC SEARCH")
+        Text("Найди свой звук", Modifier.padding(horizontal = 20.dp), fontSize = 27.sp, fontWeight = FontWeight.Bold)
+        Text("Поиск треков, артистов и миксов SoundCloud", Modifier.padding(horizontal = 20.dp, vertical = 5.dp), color = Muted, fontSize = 12.sp)
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 value = query, onValueChange = { query = it }, modifier = Modifier.weight(1f),
-                placeholder = { Text("Название трека или артиста") },
+                placeholder = { Text("Что хочешь послушать?") },
                 leadingIcon = { Icon(Icons.Filled.Search, null, tint = Purple) },
-                singleLine = true, shape = RoundedCornerShape(17.dp),
+                singleLine = true, shape = RoundedCornerShape(19.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Purple, unfocusedBorderColor = Panel2,
                     focusedTextColor = Color.White, unfocusedTextColor = Color.White, cursorColor = Purple
@@ -355,20 +415,33 @@ private fun SoundCloudScreen(modifier: Modifier) {
                 onClick = {
                     val term = query.trim()
                     if (term.isNotEmpty()) {
-                        searchUrl = "https://soundcloud.com/search?q=" + Uri.encode(term)
-                        pageTitle = "Результаты: $term"
+                        searchUrl = "https://soundcloud.com/search/sounds?q=" + Uri.encode(term)
+                        pageTitle = "Результаты поиска"
                     }
                 },
-                modifier = Modifier.size(54.dp).clip(RoundedCornerShape(16.dp)).background(Purple)
+                modifier = Modifier.size(54.dp).clip(RoundedCornerShape(17.dp)).background(
+                    Brush.linearGradient(listOf(Pink, Purple))
+                )
             ) { Icon(Icons.Filled.Search, "Искать", tint = Ink) }
         }
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("Треки", "Артисты", "Плейлисты").forEachIndexed { index, label ->
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = if (index == 0) Purple.copy(alpha = .22f) else Panel.copy(alpha = .88f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, if (index == 0) Purple.copy(alpha = .65f) else Panel2)
+                ) { Text(label, Modifier.padding(horizontal = 13.dp, vertical = 8.dp), color = if (index == 0) Pink else Muted, fontSize = 11.sp) }
+            }
+        }
         Spacer(Modifier.height(10.dp))
-        Text(pageTitle, color = Pink, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 18.dp))
-        Spacer(Modifier.height(8.dp))
+        Text(pageTitle, color = Pink, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 18.dp))
+        Spacer(Modifier.height(7.dp))
         key(searchUrl) {
             AndroidView(
                 factory = { ctx ->
                     WebView(ctx).apply {
+                        setBackgroundColor(android.graphics.Color.TRANSPARENT)
                         settings.javaScriptEnabled = true
                         settings.domStorageEnabled = true
                         settings.databaseEnabled = true
@@ -377,41 +450,81 @@ private fun SoundCloudScreen(modifier: Modifier) {
                         settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
                         android.webkit.CookieManager.getInstance().setAcceptCookie(true)
                         android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
-                        webViewClient = WebViewClient()
+                        webViewClient = object : WebViewClient() {
+                            override fun onPageFinished(view: WebView, url: String) {
+                                view.evaluateJavascript(
+                                    "(function(){var s=document.createElement('style');s.innerHTML='header,nav,[class*=header],[class*=Header],[class*=banner]{display:none!important} body{background:#100a19!important;color:#fff!important}';document.head.appendChild(s);})();",
+                                    null
+                                )
+                            }
+                        }
                         webChromeClient = WebChromeClient()
                         loadUrl(searchUrl)
                     }
                 },
                 update = { },
-                modifier = Modifier.fillMaxWidth().weight(1f).padding(horizontal = 10.dp).clip(RoundedCornerShape(18.dp))
+                modifier = Modifier.fillMaxWidth().weight(1f).padding(horizontal = 10.dp).clip(RoundedCornerShape(20.dp))
             )
         }
-        Text("Результаты и воспроизведение предоставляет SoundCloud. Некоторые треки могут быть недоступны.", color = Muted, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp))
+        Text("Поиск оформлен в FenyaCoding; каталоги и доступность треков предоставляет SoundCloud.", color = Muted, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp))
     }
 }
 
 @Composable
-private fun LibraryScreen(modifier: Modifier, name: String, hasTrack: Boolean, playing: Boolean, onChooseFile: () -> Unit, onToggle: () -> Unit) {
+private fun LibraryScreen(
+    modifier: Modifier, name: String, hasTrack: Boolean, playing: Boolean,
+    position: Int, duration: Int, onChooseFile: () -> Unit,
+    onToggle: () -> Unit, onSeek: (Int) -> Unit, onSkip: (Int) -> Unit
+) {
     Column(modifier.fillMaxSize()) {
         AppHeader("YOUR COLLECTION")
         Text("Библиотека", Modifier.padding(horizontal = 20.dp), fontSize = 27.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(14.dp))
-        Row(Modifier.padding(horizontal = 18.dp).fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Panel).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.LibraryMusic, null, tint = Purple, modifier = Modifier.size(30.dp))
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(if (hasTrack) name else "Библиотека пока пуста", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(if (hasTrack) "Локальный аудиофайл" else "Добавь аудио с устройства", color = Muted, fontSize = 11.sp)
+        Column(Modifier.padding(horizontal = 18.dp).fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Panel.copy(alpha = .94f)).padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.LibraryMusic, null, tint = Purple, modifier = Modifier.size(30.dp))
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(if (hasTrack) name else "Библиотека пока пуста", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(if (hasTrack) "Локальный аудиофайл" else "Добавь аудио с устройства", color = Muted, fontSize = 11.sp)
+                }
             }
-            if (hasTrack) IconButton(onClick = onToggle) { Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, null, tint = Purple) }
+            if (hasTrack) {
+                Spacer(Modifier.height(12.dp))
+                Slider(
+                    value = position.toFloat().coerceIn(0f, duration.coerceAtLeast(1).toFloat()),
+                    onValueChange = { onSeek(it.toInt()) },
+                    valueRange = 0f..duration.coerceAtLeast(1).toFloat(),
+                    colors = SliderDefaults.colors(thumbColor = Pink, activeTrackColor = Purple, inactiveTrackColor = Panel2)
+                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(formatTime(position), color = Muted, fontSize = 10.sp)
+                    Text(formatTime(duration), color = Muted, fontSize = 10.sp)
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { onSkip(-15000) }) { Icon(Icons.Filled.Replay10, "Назад на 15 секунд", tint = Pink, modifier = Modifier.size(30.dp)) }
+                    Spacer(Modifier.width(18.dp))
+                    IconButton(onClick = onToggle, modifier = Modifier.size(58.dp).clip(CircleShape).background(Purple)) {
+                        Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, "Пауза или воспроизведение", tint = Ink, modifier = Modifier.size(34.dp))
+                    }
+                    Spacer(Modifier.width(18.dp))
+                    IconButton(onClick = { onSkip(15000) }) { Icon(Icons.Filled.Forward10, "Вперёд на 15 секунд", tint = Pink, modifier = Modifier.size(30.dp)) }
+                }
+            }
         }
         Spacer(Modifier.height(12.dp))
         Button(onClick = onChooseFile, modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp), colors = ButtonDefaults.buttonColors(containerColor = Purple, contentColor = Ink)) {
             Icon(Icons.Filled.Add, null); Spacer(Modifier.width(6.dp)); Text("Добавить аудиофайл")
         }
         Spacer(Modifier.height(12.dp))
-        Text("Поддерживаются аудиофайлы, которые может открыть Android.", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 20.dp))
+        Text("Перемотка и управление доступны для локальных аудиофайлов.", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 20.dp))
     }
+}
+
+private fun formatTime(ms: Int): String {
+    val total = (ms / 1000).coerceAtLeast(0)
+    return "%d:%02d".format(total / 60, total % 60)
 }
 
 @Composable
