@@ -28,14 +28,21 @@ jobs:
 
       - name: Align Java and Kotlin JVM targets
         run: |
-          printf '\n// Align Java bytecode target with Kotlin JVM target\ntasks.withType<org.gradle.api.tasks.compile.JavaCompile>().configureEach {\n    sourceCompatibility = "17"\n    targetCompatibility = "17"\n}\n' >> "$PROJECT_DIR/app/build.gradle.kts"
+          cat > "$RUNNER_TEMP/jvm-target.gradle" <<'EOF'
+          allprojects {
+              tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+          }
+          EOF
 
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
 
       - name: Build APK
-        run: gradle -p "$PROJECT_DIR" assembleDebug
+        run: gradle -I "$RUNNER_TEMP/jvm-target.gradle" -p "$PROJECT_DIR" assembleDebug
 
       - uses: actions/upload-artifact@v4
         with:
