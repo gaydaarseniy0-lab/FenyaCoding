@@ -121,8 +121,8 @@ private fun FenyaApp() {
         secondary = Pink
     )) {
         Box(Modifier.fillMaxSize().background(Ink)) {
-            StarField()
             BoykisserBackdrop()
+            StarField()
             if (showSplash) {
                 SplashScreen()
             } else {
@@ -394,6 +394,7 @@ private fun SourceCard(icon: androidx.compose.ui.graphics.vector.ImageVector, ti
 private fun SoundCloudScreen(modifier: Modifier) {
     var query by remember { mutableStateOf("") }
     var searchUrl by remember { mutableStateOf("https://soundcloud.com/discover") }
+    var selectedType by remember { mutableStateOf("sounds") }
     var pageTitle by remember { mutableStateOf("Подборки для тебя") }
     Column(modifier.fillMaxSize()) {
         AppHeader("FENYA MUSIC SEARCH")
@@ -415,7 +416,7 @@ private fun SoundCloudScreen(modifier: Modifier) {
                 onClick = {
                     val term = query.trim()
                     if (term.isNotEmpty()) {
-                        searchUrl = "https://soundcloud.com/search/sounds?q=" + Uri.encode(term)
+                        searchUrl = "https://soundcloud.com/search/" + selectedType + "?q=" + Uri.encode(term)
                         pageTitle = "Результаты поиска"
                     }
                 },
@@ -426,12 +427,14 @@ private fun SoundCloudScreen(modifier: Modifier) {
         }
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("Треки", "Артисты", "Плейлисты").forEachIndexed { index, label ->
+            listOf("Треки" to "sounds", "Артисты" to "users", "Плейлисты" to "playlists").forEach { (label, type) ->
+                val selected = selectedType == type
                 Surface(
+                    modifier = Modifier.clickable { selectedType = type },
                     shape = RoundedCornerShape(50),
-                    color = if (index == 0) Purple.copy(alpha = .22f) else Panel.copy(alpha = .88f),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, if (index == 0) Purple.copy(alpha = .65f) else Panel2)
-                ) { Text(label, Modifier.padding(horizontal = 13.dp, vertical = 8.dp), color = if (index == 0) Pink else Muted, fontSize = 11.sp) }
+                    color = if (selected) Purple.copy(alpha = .22f) else Panel.copy(alpha = .88f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) Purple.copy(alpha = .65f) else Panel2)
+                ) { Text(label, Modifier.padding(horizontal = 13.dp, vertical = 8.dp), color = if (selected) Pink else Muted, fontSize = 11.sp) }
             }
         }
         Spacer(Modifier.height(10.dp))
