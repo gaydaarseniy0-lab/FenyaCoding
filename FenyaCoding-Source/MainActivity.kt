@@ -68,15 +68,24 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         mediaSession = MediaSession(this, "FenyaCoding").apply {
             setCallback(object : MediaSession.Callback() {
-                override fun onPlay() { sessionPlayer?.let { try { if (!it.isPlaying) it.start() } catch (_: Exception) {} } }
-                override fun onPause() { sessionPlayer?.let { try { if (it.isPlaying) it.pause() } catch (_: Exception) {} } }
-                override fun onSeekTo(pos: Long) { sessionPlayer?.let { try { it.seekTo(pos.toInt().coerceIn(0, it.duration)) } catch (_: Exception) {} } }
-                override fun onSkipToNext() { sessionPlayer?.let { try { it.seekTo((it.currentPosition + 15000).coerceAtMost(it.duration)) } catch (_: Exception) {} } }
-                override fun onSkipToPrevious() { sessionPlayer?.let { try { it.seekTo((it.currentPosition - 15000).coerceAtLeast(0)) } catch (_: Exception) {} } }
+                override fun onPlay() { sessionPlayer?.let { try { if (!it.isPlaying) it.start() } catch (_: Exception) {} }; publishSessionState(true) }
+                override fun onPause() { sessionPlayer?.let { try { if (it.isPlaying) it.pause() } catch (_: Exception) {} }; publishSessionState(false) }
+                override fun onSeekTo(pos: Long) { sessionPlayer?.let { try { it.seekTo(pos.toInt().coerceIn(0, it.duration)) } catch (_: Exception) {} }; publishSessionState(sessionPlayer?.isPlaying == true) }
+                override fun onSkipToNext() { sessionPlayer?.let { try { it.seekTo((it.currentPosition + 15000).coerceAtMost(it.duration)) } catch (_: Exception) {} }; publishSessionState(sessionPlayer?.isPlaying == true) }
+                override fun onSkipToPrevious() { sessionPlayer?.let { try { it.seekTo((it.currentPosition - 15000).coerceAtLeast(0)) } catch (_: Exception) {} }; publishSessionState(sessionPlayer?.isPlaying == true) }
             })
             isActive = true
         }
         setContent { FenyaApp() }
+    }
+
+    private fun publishSessionState(playing: Boolean) {
+        if (!::mediaSession.isInitialized) return
+        val actions = PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_PLAY_PAUSE or
+            PlaybackState.ACTION_SEEK_TO or PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS
+        val position = try { sessionPlayer?.currentPosition?.toLong() ?: 0L } catch (_: Exception) { 0L }
+        mediaSession.setPlaybackState(PlaybackState.Builder().setActions(actions)
+            .setState(if (playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED, position, 1f).build())
     }
 
     fun updateMediaSession(title: String, artist: String, playing: Boolean, duration: Int, position: Int, art: Bitmap?) {
@@ -220,19 +229,24 @@ private fun FenyaApp() {
                 }
             ) { padding ->
                 when (tab) {
-                    Tab.Home -> HomeScreen(
-                        Modifier.padding(padding),
-                        localName,
-                        isPlaying,
+                    Tab.Home -> if (isPlaying && localUri != null) {
+                        NowPlayingScreen(
+                            Modifier.padding(padding), trackArtwork, localName, trackArtist,
+                            playbackPosition, playbackDuration,
+                            onSeek = { value -> player?.seekTo(value); playbackPosition = value },
+                            onToggle = {
+                                player?.let { p -> try { if (p.isPlaying) { p.pause(); isPlaying = false } else { p.start(); isPlaying = true } } catch (_: Exception) { isPlaying = false } }
+                            }
+                        )
+                    } else HomeScreen(
+                        Modifier.padding(padding), localName, isPlaying,
                         onOpenSoundCloud = { tab = Tab.SoundCloud },
                         onChooseFile = { picker.launch(arrayOf("audio/*")) },
                         onToggle = {
                             val p = player
                             if (p != null) {
-                                try {
-                                    if (p.isPlaying) { p.pause(); isPlaying = false }
-                                    else { p.start(); isPlaying = true }
-                                } catch (_: Exception) { isPlaying = false }
+                                try { if (p.isPlaying) { p.pause(); isPlaying = false } else { p.start(); isPlaying = true } }
+                                catch (_: Exception) { isPlaying = false }
                             } else tab = Tab.Library
                         }
                     )
@@ -381,6 +395,45 @@ private fun HomeScreen(
                 SourceCard(Icons.Filled.Cloud, "SoundCloud", "Открой публичную ссылку или встроенный плеер", onOpenSoundCloud)
                 Spacer(Modifier.height(9.dp))
                 SourceCard(Icons.Filled.FolderOpen, "Локальные файлы", "Выбери аудио на устройстве", onChooseFile)
+            }
+        }
+    }
+}
+
+@Composable
+private fun NowPlayingScreen(
+    modifier: Modifier, artwork: Bitmap?, title: String, artist: String,
+    position: Int, duration: Int, onSeek: (Int) -> Unit, onToggle: () -> Unit
+) {
+    Box(modifier.fillMaxSize()) {
+        if (artwork != null) {
+            Image(bitmap = artwork.asImageBitmap(), contentDescription = "Обложка трека",
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        } else {
+            Box(Modifier.fillMaxSize().background(Brush.linearGradient(listOf(Color(0xFF452568), Ink, Color(0xFF170D25)))))
+        }
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0x55090611), Color(0x22090611), Color(0xDD090611)))))
+        Column(Modifier.align(Alignment.CenterEnd).padding(horizontal = 24.dp).widthIn(max = 290.dp),
+            horizontalAlignment = Alignment.End) {
+            Text("СЕЙЧАС ИГРАЕТ", color = Pink, fontSize = 10.sp, letterSpacing = 2.sp)
+            Spacer(Modifier.height(10.dp))
+            Text(title, color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.ExtraBold,
+                textAlign = androidx.compose.ui.text.style.TextAlign.End, maxLines = 3, overflow = TextOverflow.Ellipsis)
+            Text(artist, color = Color.White.copy(alpha = .82f), fontSize = 15.sp,
+                textAlign = androidx.compose.ui.text.style.TextAlign.End, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Panel.copy(alpha = .88f)).padding(horizontal = 18.dp, vertical = 10.dp)) {
+            Slider(value = position.toFloat().coerceIn(0f, duration.coerceAtLeast(1).toFloat()),
+                onValueChange = { onSeek(it.toInt()) }, valueRange = 0f..duration.coerceAtLeast(1).toFloat(),
+                colors = SliderDefaults.colors(thumbColor = Pink, activeTrackColor = Purple, inactiveTrackColor = Panel2))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(formatTime(position), color = Muted, fontSize = 10.sp)
+                Text(formatTime(duration), color = Muted, fontSize = 10.sp)
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                IconButton(onClick = onToggle, modifier = Modifier.size(54.dp).clip(CircleShape).background(Purple)) {
+                    Icon(Icons.Filled.Pause, "Пауза", tint = Ink, modifier = Modifier.size(31.dp))
+                }
             }
         }
     }
