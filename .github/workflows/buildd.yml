@@ -53,7 +53,7 @@ jobs:
               raise SystemExit("MainActivity.kt not found")
           p = files[0]
           s = p.read_text()
-          pattern = r'update\\s*=\\s*\\{\\s*view\\s*->\\s*view\\.loadUrl\\(.*?\\)\\s*\\}'
+          pattern = r'update\s*=\s*\{[\s\S]*?view\.loadUrl[\s\S]*?\}'
           s2, count = re.subn(pattern, 'update = { }', s, count=1)
           if count != 1:
               raise SystemExit("Could not locate SoundCloud WebView update lambda")
