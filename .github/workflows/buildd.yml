@@ -26,6 +26,14 @@ jobs:
           PROJECT_DIR=$(dirname "$(find project -name settings.gradle.kts -print -quit)")
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
+      - name: Upload editable source
+        run: zip -qr /tmp/FenyaCoding-Source.zip "$PROJECT_DIR"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FenyaCoding-Source
+          path: /tmp/FenyaCoding-Source.zip
+
       - name: Align Java compile target
         run: |
           python3 - <<'PY'
