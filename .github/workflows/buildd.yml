@@ -46,34 +46,20 @@ jobs:
       - name: Fix and expose SoundCloud player
         run: |
           python3 - <<'PY'
+          import re
           from pathlib import Path
           files = list(Path("project").rglob("MainActivity.kt"))
           if not files:
               raise SystemExit("MainActivity.kt not found")
           p = files[0]
           s = p.read_text()
-          old = 'if (submittedUrl.isNotEmpty()) {'
-          new = 'if (submittedUrl.isNotEmpty()) {\n                    val playerUrl = "https://w.soundcloud.com/player/?url=${Uri.encode(submittedUrl)}&auto_play=false&visual=true"'
-          if old not in s:
-              raise SystemExit("SoundCloud screen anchor not found")
-          s = s.replace(old, new, 1)
-          old_factory = 'factory = { ctx -> WebView(ctx).apply {'
-          new_factory = 'factory = { ctx -> WebView(ctx).apply {\n                            tag = playerUrl'
-          if old_factory not in s:
-              raise SystemExit("SoundCloud WebView factory not found")
-          s = s.replace(old_factory, new_factory, 1)
-          old_load = 'loadUrl("https://w.soundcloud.com/player/?url=${Uri.encode(submittedUrl)}&auto_play=false&visual=true")'
-          if old_load not in s:
-              raise SystemExit("SoundCloud player URL not found")
-          s = s.replace(old_load, 'loadUrl(playerUrl)', 1)
-          old_update = 'update = { view -> view.loadUrl("https://w.soundcloud.com/player/?url=${Uri.encode(submittedUrl)}&auto_play=false&visual=true") }'
-          new_update = 'update = { view -> if (view.tag != playerUrl) { view.tag = playerUrl; view.loadUrl(playerUrl) } }'
-          if old_update not in s:
-              raise SystemExit("SoundCloud WebView update anchor not found")
-          s = s.replace(old_update, new_update, 1)
-          s = s.replace('Search("Поиск")', 'Search("SoundCloud")', 1)
-          p.write_text(s)
-          print("SoundCloud WebView reload fix applied")
+          pattern = r'update\\s*=\\s*\\{\\s*view\\s*->\\s*view\\.loadUrl\\(.*?\\)\\s*\\}'
+          s2, count = re.subn(pattern, 'update = { }', s, count=1)
+          if count != 1:
+              raise SystemExit("Could not locate SoundCloud WebView update lambda")
+          s2 = s2.replace('Search("Поиск")', 'Search("SoundCloud")', 1)
+          p.write_text(s2)
+          print("SoundCloud WebView now loads once; tab label updated")
           PY
 
       - name: Install Niko launcher icon and bump app version
