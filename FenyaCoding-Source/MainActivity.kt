@@ -1,6 +1,10 @@
 package com.fenyacoding.music
 
 import android.media.MediaPlayer
+import android.media.session.MediaSession
+import android.media.session.PlaybackState
+import android.media.MediaMetadata
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Bundle
 import android.webkit.WebChromeClient
@@ -57,9 +61,41 @@ private val Pink = Color(0xFFE5A6FF)
 private val Muted = Color(0xFFAA9BBE)
 
 class MainActivity : ComponentActivity() {
+    private lateinit var mediaSession: MediaSession
+    var sessionPlayer: MediaPlayer? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        mediaSession = MediaSession(this, "FenyaCoding").apply {
+            setCallback(object : MediaSession.Callback() {
+                override fun onPlay() { sessionPlayer?.let { try { if (!it.isPlaying) it.start() } catch (_: Exception) {} } }
+                override fun onPause() { sessionPlayer?.let { try { if (it.isPlaying) it.pause() } catch (_: Exception) {} } }
+                override fun onSeekTo(pos: Long) { sessionPlayer?.let { try { it.seekTo(pos.toInt().coerceIn(0, it.duration)) } catch (_: Exception) {} } }
+                override fun onSkipToNext() { sessionPlayer?.let { try { it.seekTo((it.currentPosition + 15000).coerceAtMost(it.duration)) } catch (_: Exception) {} } }
+                override fun onSkipToPrevious() { sessionPlayer?.let { try { it.seekTo((it.currentPosition - 15000).coerceAtLeast(0)) } catch (_: Exception) {} } }
+            })
+            isActive = true
+        }
         setContent { FenyaApp() }
+    }
+
+    fun updateMediaSession(title: String, artist: String, playing: Boolean, duration: Int, position: Int, art: Bitmap?) {
+        if (!::mediaSession.isInitialized) return
+        val metadata = MediaMetadata.Builder()
+            .putString(MediaMetadata.METADATA_KEY_TITLE, title)
+            .putString(MediaMetadata.METADATA_KEY_ARTIST, artist)
+            .putLong(MediaMetadata.METADATA_KEY_DURATION, duration.toLong())
+        if (art != null) metadata.putBitmap(MediaMetadata.METADATA_KEY_ART, art)
+        mediaSession.setMetadata(metadata.build())
+        val actions = PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_PLAY_PAUSE or
+            PlaybackState.ACTION_SEEK_TO or PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS
+        mediaSession.setPlaybackState(PlaybackState.Builder().setActions(actions)
+            .setState(if (playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED, position.toLong(), 1f).build())
+    }
+
+    override fun onDestroy() {
+        if (::mediaSession.isInitialized) { mediaSession.isActive = false; mediaSession.release() }
+        super.onDestroy()
     }
 }
 
@@ -81,6 +117,8 @@ private fun FenyaApp() {
     var player by remember { mutableStateOf<MediaPlayer?>(null) }
     var playbackPosition by remember { mutableIntStateOf(0) }
     var playbackDuration by remember { mutableIntStateOf(0) }
+    var trackArtist by remember { mutableStateOf("Неизвестный исполнитель") }
+    var trackArtwork by remember { mutableStateOf<Bitmap?>(null) }
     val context = LocalContext.current
 
     LaunchedEffect(player, isPlaying) {
@@ -103,6 +141,16 @@ private fun FenyaApp() {
                 if (player == null) throw IllegalStateException("Не удалось открыть аудио")
                 localUri = uri
                 localName = uri.lastPathSegment?.substringAfterLast('/') ?: "Выбранный аудиофайл"
+                try {
+                    val retriever = MediaMetadataRetriever()
+                    retriever.setDataSource(context, uri)
+                    localName = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE) ?: localName
+                    trackArtist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST)
+                        ?: retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST)
+                        ?: "Неизвестный исполнитель"
+                    trackArtwork = retriever.embeddedPicture?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
+                    retriever.release()
+                } catch (_: Exception) { trackArtist = "Локальный аудиофайл"; trackArtwork = null }
                 isPlaying = false
                 tab = Tab.Library
             } catch (e: Exception) {
@@ -111,8 +159,14 @@ private fun FenyaApp() {
         }
     }
 
+    SideEffect {
+        (context as? MainActivity)?.let { activity ->
+            activity.sessionPlayer = player
+            activity.updateMediaSession(localName, trackArtist, isPlaying, playbackDuration, playbackPosition, trackArtwork)
+        }
+    }
     DisposableEffect(Unit) {
-        onDispose { player?.release(); player = null }
+        onDispose { player?.release(); player = null; (context as? MainActivity)?.sessionPlayer = null }
     }
 
     MaterialTheme(colorScheme = darkColorScheme(
@@ -121,8 +175,21 @@ private fun FenyaApp() {
         secondary = Pink
     )) {
         Box(Modifier.fillMaxSize().background(Ink)) {
-            BoykisserBackdrop()
+            if (isPlaying && trackArtwork != null) {
+                Image(bitmap = trackArtwork!!.asImageBitmap(), contentDescription = "Обложка текущего трека",
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                Box(Modifier.fillMaxSize().background(Color(0x99090611)))
+            } else { BoykisserBackdrop() }
             StarField()
+            if (isPlaying && localUri != null) {
+                Column(Modifier.align(Alignment.CenterEnd).padding(end = 24.dp, bottom = 104.dp).widthIn(max = 250.dp),
+                    horizontalAlignment = Alignment.End) {
+                    Text(localName, color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.ExtraBold,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.End, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(trackArtist, color = Pink, fontSize = 14.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.End, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
             if (showSplash) {
                 SplashScreen()
             } else {
@@ -202,17 +269,10 @@ private fun SplashScreen() {
         animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "glow"
     )
     Column(
-        Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF160B28), Ink))),
-        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center
+        Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF160B28), Ink))).padding(top = 76.dp),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Top
     ) {
-        Box(
-            Modifier.size(116.dp).clip(CircleShape).background(Brush.linearGradient(listOf(Purple, Color(0xFF54238A)))),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Filled.Headphones, null, tint = Color.White.copy(alpha = glow), modifier = Modifier.size(62.dp))
-        }
-        Spacer(Modifier.height(22.dp))
-        Text("Привет!", color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.ExtraBold)
+        Text("Привет!", color = Color.White.copy(alpha = glow), fontSize = 34.sp, fontWeight = FontWeight.ExtraBold)
         Text("Добро пожаловать в FenyaCoding", color = Pink, fontSize = 14.sp)
         Spacer(Modifier.height(22.dp))
         CircularProgressIndicator(color = Purple, strokeWidth = 2.dp, modifier = Modifier.size(24.dp))
@@ -243,49 +303,23 @@ private fun BoykisserBackdrop() {
 
 @Composable
 private fun StarField() {
-    val transition = rememberInfiniteTransition(label = "softSpace")
-    val progress by transition.animateFloat(
-        initialValue = 0f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(7200, easing = LinearEasing), RepeatMode.Restart),
-        label = "cometMotion"
-    )
-    val twinkle by transition.animateFloat(
-        initialValue = .22f, targetValue = .72f,
-        animationSpec = infiniteRepeatable(tween(1900), RepeatMode.Reverse), label = "softTwinkle"
-    )
+    val transition = rememberInfiniteTransition(label = "fallingStars")
+    val progress by transition.animateFloat(initialValue = 0f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(8500, easing = LinearEasing), RepeatMode.Restart), label = "fallingMotion")
+    val twinkle by transition.animateFloat(initialValue = .18f, targetValue = .68f,
+        animationSpec = infiniteRepeatable(tween(2100), RepeatMode.Reverse), label = "softTwinkle")
     Canvas(Modifier.fillMaxSize()) {
-        for (i in 0 until 95) {
+        for (i in 0 until 110) {
             val x = ((i * 73 + 19) % 997) / 997f * size.width
-            val y = ((i * 137 + 41) % 991) / 991f * size.height
-            val radius = if (i % 8 == 0) 5.5f else 2.4f
+            val baseY = ((i * 137 + 41) % 991) / 991f * size.height
+            val speed = 0.45f + (i % 5) * 0.12f
+            val y = (baseY + progress * size.height * speed) % size.height
+            val radius = if (i % 9 == 0) 3.8f else 1.7f
             val center = androidx.compose.ui.geometry.Offset(x, y)
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        if (i % 3 == 0) Pink.copy(alpha = twinkle) else Color.White.copy(alpha = twinkle * .8f),
-                        Purple.copy(alpha = twinkle * .20f),
-                        Color.Transparent
-                    ),
-                    center = center,
-                    radius = radius * 4.8f
-                ),
-                radius = radius * 4.8f,
-                center = center
-            )
-            drawCircle(Color.White.copy(alpha = twinkle * .55f), radius = radius * .38f, center = center)
-        }
-        for (i in 0 until 2) {
-            val phase = (progress + i * .5f) % 1f
-            val x = phase * (size.width + 220f) - 110f
-            val y = size.height * (.22f + i * .42f)
-            val tail = androidx.compose.ui.geometry.Offset(x - 100f, y + 65f)
-            val head = androidx.compose.ui.geometry.Offset(x, y)
-            drawLine(Purple.copy(alpha = .08f), tail, head, strokeWidth = 19f)
-            drawLine(Color.White.copy(alpha = .5f), tail, head, strokeWidth = 2.5f)
-            drawCircle(
-                Brush.radialGradient(listOf(Pink.copy(alpha = .8f), Purple.copy(alpha = .25f), Color.Transparent), head, 18f),
-                18f, head
-            )
+            drawCircle(brush = Brush.radialGradient(
+                colors = listOf(Color.White.copy(alpha = twinkle), Purple.copy(alpha = twinkle * .24f), Color.Transparent),
+                center = center, radius = radius * 4.5f), radius = radius * 4.5f, center = center)
+            drawCircle(Color.White.copy(alpha = twinkle * .75f), radius = radius * .42f, center = center)
         }
     }
 }
@@ -301,9 +335,7 @@ private fun AppHeader(subtitle: String = "YOUR PURPLE MUSIC SPACE") {
             Text("FenyaCoding", color = Purple, fontSize = 25.sp, fontWeight = FontWeight.ExtraBold)
             Text(subtitle, color = Muted, fontSize = 9.sp, letterSpacing = 1.8.sp)
         }
-        Box(Modifier.size(46.dp).clip(CircleShape).background(Panel2), contentAlignment = Alignment.Center) {
-            Icon(Icons.Filled.Headphones, null, tint = Purple, modifier = Modifier.size(25.dp))
-        }
+
     }
 }
 
