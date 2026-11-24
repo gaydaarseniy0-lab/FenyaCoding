@@ -15,11 +15,13 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Extract project
+      - name: Extract base project and v1.2 update
         run: |
           mkdir project
-          unzip -q ./*.zip -d project
-          find project -name settings.gradle.kts
+          unzip -oq FenyaCoding-Android-v1-phone-build.zip -d project
+          base64 -d FenyaCoding-Overlay.zip.b64 > /tmp/fenya-overlay.zip
+          unzip -oq /tmp/fenya-overlay.zip -d project
+          find project -name settings.gradle.kts -print
 
       - name: Locate project
         run: |
@@ -43,7 +45,6 @@ jobs:
           s = p.read_text()
           s += """
 
-          // CI compatibility: match Java bytecode target to Kotlin/JVM 17.
           android {
               compileOptions {
                   sourceCompatibility = JavaVersion.VERSION_17
@@ -52,8 +53,6 @@ jobs:
           }
           """
           p.write_text(s)
-          print("Updated:", p)
-          print(s)
           PY
 
       - uses: gradle/actions/setup-gradle@v4
