@@ -62,6 +62,11 @@ private enum class Tab(val title: String) {
 
 @Composable
 private fun FenyaApp() {
+    var showSplash by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(1900)
+        showSplash = false
+    }
     var tab by remember { mutableStateOf(Tab.Home) }
     var localUri by remember { mutableStateOf<Uri?>(null) }
     var localName by remember { mutableStateOf("Локальный трек не выбран") }
@@ -99,6 +104,9 @@ private fun FenyaApp() {
     )) {
         Box(Modifier.fillMaxSize().background(Ink)) {
             StarField()
+            if (showSplash) {
+                SplashScreen()
+            } else {
             Scaffold(
                 containerColor = Color.Transparent,
                 bottomBar = {
@@ -159,24 +167,65 @@ private fun FenyaApp() {
                     Tab.Settings -> SettingsScreen(Modifier.padding(padding))
                 }
             }
+            }
         }
     }
 }
 
 @Composable
+private fun SplashScreen() {
+    val transition = rememberInfiniteTransition(label = "splashGlow")
+    val glow by transition.animateFloat(
+        initialValue = 0.55f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "glow"
+    )
+    Column(
+        Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF160B28), Ink))),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center
+    ) {
+        Box(
+            Modifier.size(116.dp).clip(CircleShape).background(Brush.linearGradient(listOf(Purple, Color(0xFF54238A)))),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Filled.Headphones, null, tint = Color.White.copy(alpha = glow), modifier = Modifier.size(62.dp))
+        }
+        Spacer(Modifier.height(22.dp))
+        Text("Привет!", color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.ExtraBold)
+        Text("Добро пожаловать в FenyaCoding", color = Pink, fontSize = 14.sp)
+        Spacer(Modifier.height(22.dp))
+        CircularProgressIndicator(color = Purple, strokeWidth = 2.dp, modifier = Modifier.size(24.dp))
+    }
+}
+
+@Composable
 private fun StarField() {
-    val transition = rememberInfiniteTransition(label = "stars")
-    val alpha by transition.animateFloat(
-        initialValue = .25f, targetValue = .8f,
-        animationSpec = infiniteRepeatable(tween(2400, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "twinkle"
+    val transition = rememberInfiniteTransition(label = "spaceMotion")
+    val progress by transition.animateFloat(
+        initialValue = 0f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(5200, easing = LinearEasing), RepeatMode.Restart),
+        label = "meteorMotion"
+    )
+    val twinkle by transition.animateFloat(
+        initialValue = .35f, targetValue = .95f,
+        animationSpec = infiniteRepeatable(tween(1500), RepeatMode.Reverse), label = "starTwinkle"
     )
     Canvas(Modifier.fillMaxSize()) {
-        for (i in 0 until 54) {
+        for (i in 0 until 76) {
             val x = ((i * 73 + 19) % 997) / 997f * size.width
             val y = ((i * 137 + 41) % 991) / 991f * size.height
-            val r = if (i % 7 == 0) 2.1f else 1.1f
-            drawCircle(if (i % 3 == 0) Pink.copy(alpha = alpha) else Color.White.copy(alpha = alpha * .7f), r, androidx.compose.ui.geometry.Offset(x, y))
+            val r = if (i % 9 == 0) 2.3f else 1.1f
+            drawCircle(if (i % 3 == 0) Pink.copy(alpha = twinkle) else Color.White.copy(alpha = twinkle * .72f), r, androidx.compose.ui.geometry.Offset(x, y))
+        }
+        for (i in 0 until 3) {
+            val phase = (progress + i * .34f) % 1f
+            val x = phase * (size.width + 180f) - 90f
+            val y = size.height * (.16f + i * .29f)
+            val tail = androidx.compose.ui.geometry.Offset(x - 72f, y + 46f)
+            val head = androidx.compose.ui.geometry.Offset(x, y)
+            drawLine(Purple.copy(alpha = .12f), tail, head, strokeWidth = 9f)
+            drawLine(Color.White.copy(alpha = .75f), tail, head, strokeWidth = 2.1f)
+            drawCircle(Pink.copy(alpha = .85f), 3.2f, head)
+            drawCircle(Color.White.copy(alpha = .75f), 1.3f, head)
         }
     }
 }
@@ -283,67 +332,61 @@ private fun SourceCard(icon: androidx.compose.ui.graphics.vector.ImageVector, ti
 
 @Composable
 private fun SoundCloudScreen(modifier: Modifier) {
-    var input by remember { mutableStateOf("") }
-    var activeUrl by remember { mutableStateOf("") }
+    var query by remember { mutableStateOf("") }
+    var searchUrl by remember { mutableStateOf("https://soundcloud.com/discover") }
+    var pageTitle by remember { mutableStateOf("Открой музыку SoundCloud") }
     Column(modifier.fillMaxSize()) {
-        AppHeader("SOUNDCLOUD PLAYER")
-        Text("SoundCloud", Modifier.padding(horizontal = 20.dp), fontSize = 27.sp, fontWeight = FontWeight.Bold)
-        Text("Вставь ссылку на публичный трек или плейлист.", Modifier.padding(horizontal = 20.dp, vertical = 6.dp), color = Muted, fontSize = 12.sp)
-        OutlinedTextField(
-            value = input, onValueChange = { input = it },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
-            placeholder = { Text("https://soundcloud.com/...") },
-            leadingIcon = { Icon(Icons.Filled.Link, null, tint = Purple) },
-            singleLine = true, shape = RoundedCornerShape(17.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = Purple, unfocusedBorderColor = Panel2,
-                focusedTextColor = Color.White, unfocusedTextColor = Color.White,
-                cursorColor = Purple
-            )
-        )
-        Spacer(Modifier.height(10.dp))
-        Button(
-            onClick = {
-                val candidate = input.trim()
-                if (candidate.startsWith("https://soundcloud.com/") || candidate.startsWith("http://soundcloud.com/")) activeUrl = candidate
-            },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Purple, contentColor = Ink),
-            shape = RoundedCornerShape(15.dp)
-        ) { Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text("Открыть плеер") }
-        Spacer(Modifier.height(14.dp))
-        if (activeUrl.isNotBlank()) {
-            val embed = "https://w.soundcloud.com/player/?url=" + Uri.encode(activeUrl) + "&auto_play=false&visual=true&color=%23b98aff"
-            key(embed) {
-                AndroidView(
-                    factory = { ctx ->
-                        WebView(ctx).apply {
-                            settings.javaScriptEnabled = true
-                            settings.domStorageEnabled = true
-                            settings.mediaPlaybackRequiresUserGesture = true
-                            settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-                            webViewClient = WebViewClient()
-                            webChromeClient = WebChromeClient()
-                            loadUrl(embed)
-                        }
-                    },
-                    update = { },
-                    modifier = Modifier.fillMaxWidth().weight(1f).padding(horizontal = 12.dp).clip(RoundedCornerShape(18.dp))
+        AppHeader("SOUNDCLOUD SEARCH")
+        Text("Поиск музыки", Modifier.padding(horizontal = 20.dp), fontSize = 27.sp, fontWeight = FontWeight.Bold)
+        Text("Ищи треки, исполнителей и плейлисты прямо в SoundCloud.", Modifier.padding(horizontal = 20.dp, vertical = 6.dp), color = Muted, fontSize = 12.sp)
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = query, onValueChange = { query = it }, modifier = Modifier.weight(1f),
+                placeholder = { Text("Название трека или артиста") },
+                leadingIcon = { Icon(Icons.Filled.Search, null, tint = Purple) },
+                singleLine = true, shape = RoundedCornerShape(17.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Purple, unfocusedBorderColor = Panel2,
+                    focusedTextColor = Color.White, unfocusedTextColor = Color.White, cursorColor = Purple
                 )
-            }
-        } else {
-            Column(
-                Modifier.fillMaxWidth().weight(1f).padding(18.dp).clip(RoundedCornerShape(22.dp)).background(Panel).padding(22.dp),
-                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center
-            ) {
-                Icon(Icons.Filled.Cloud, null, tint = Purple, modifier = Modifier.size(44.dp))
-                Spacer(Modifier.height(12.dp))
-                Text("Треки SoundCloud", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                Spacer(Modifier.height(6.dp))
-                Text("Плеер появится здесь после вставки ссылки. Доступность зависит от настроек автора трека.", color = Muted, fontSize = 12.sp, lineHeight = 18.sp)
-            }
+            )
+            Spacer(Modifier.width(8.dp))
+            IconButton(
+                onClick = {
+                    val term = query.trim()
+                    if (term.isNotEmpty()) {
+                        searchUrl = "https://soundcloud.com/search?q=" + Uri.encode(term)
+                        pageTitle = "Результаты: $term"
+                    }
+                },
+                modifier = Modifier.size(54.dp).clip(RoundedCornerShape(16.dp)).background(Purple)
+            ) { Icon(Icons.Filled.Search, "Искать", tint = Ink) }
         }
-        Text("Воспроизведение доступно для треков, разрешённых для встраивания.", color = Muted, fontSize = 10.sp, modifier = Modifier.padding(14.dp))
+        Spacer(Modifier.height(10.dp))
+        Text(pageTitle, color = Pink, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 18.dp))
+        Spacer(Modifier.height(8.dp))
+        key(searchUrl) {
+            AndroidView(
+                factory = { ctx ->
+                    WebView(ctx).apply {
+                        settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
+                        settings.databaseEnabled = true
+                        settings.loadsImagesAutomatically = true
+                        settings.mediaPlaybackRequiresUserGesture = true
+                        settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                        android.webkit.CookieManager.getInstance().setAcceptCookie(true)
+                        android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+                        webViewClient = WebViewClient()
+                        webChromeClient = WebChromeClient()
+                        loadUrl(searchUrl)
+                    }
+                },
+                update = { },
+                modifier = Modifier.fillMaxWidth().weight(1f).padding(horizontal = 10.dp).clip(RoundedCornerShape(18.dp))
+            )
+        }
+        Text("Результаты и воспроизведение предоставляет SoundCloud. Некоторые треки могут быть недоступны.", color = Muted, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp))
     }
 }
 
